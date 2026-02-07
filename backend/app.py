@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import uuid
 
+from dotenv import load_dotenv
+load_dotenv()
+
+
 from config import Config
 from services.blob_service import BlobStorage
 from services.extract_text import extract_text
@@ -16,61 +20,72 @@ CORS(app)
 cfg = Config()
 
 # Init services
-blob = BlobStorage(cfg.AZURE_BLOB_CONNECTION_STRING, cfg.AZURE_BLOB_CONTAINER)
+blob = BlobStorage(cfg.AZURE_BLOB_CONNECTION_STRING or "", cfg.AZURE_BLOB_CONTAINER or "")
 aoai = AOAI(
-    endpoint=cfg.AZURE_OPENAI_ENDPOINT,
-    api_key=cfg.AZURE_OPENAI_API_KEY,
-    api_version=cfg.AZURE_OPENAI_API_VERSION,
-    chat_deployment=cfg.AZURE_OPENAI_CHAT_DEPLOYMENT,
-    embedding_deployment=cfg.AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+    endpoint=cfg.AZURE_OPENAI_ENDPOINT or "",
+    api_key=cfg.AZURE_OPENAI_API_KEY or "",
+    api_version=cfg.AZURE_OPENAI_API_VERSION or "",
+    chat_deployment=cfg.AZURE_OPENAI_CHAT_DEPLOYMENT or "",
+    embedding_deployment=cfg.AZURE_OPENAI_EMBEDDING_DEPLOYMENT or ""
 )
 
-create_index_if_missing(cfg.AZURE_SEARCH_ENDPOINT, cfg.AZURE_SEARCH_API_KEY, cfg.AZURE_SEARCH_INDEX_NAME)
-search_client = get_search_client(cfg.AZURE_SEARCH_ENDPOINT, cfg.AZURE_SEARCH_API_KEY, cfg.AZURE_SEARCH_INDEX_NAME)
+create_index_if_missing(cfg.AZURE_SEARCH_ENDPOINT or "", cfg.AZURE_SEARCH_API_KEY or "", cfg.AZURE_SEARCH_INDEX_NAME or "")
+search_client = get_search_client(cfg.AZURE_SEARCH_ENDPOINT or "", cfg.AZURE_SEARCH_API_KEY or "", cfg.AZURE_SEARCH_INDEX_NAME or "")
 
 # simple in-memory registry for demo (replace with DB later)
 DOCUMENTS = {}  # doc_id -> {filename, blob_name}
 
 @app.post("/upload")
 def upload():
-    if "file" not in request.files:
-        return jsonify({"error": "Missing file"}), 400
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "Missing file"}), 400
 
-    f = request.files["file"]
-    filename = f.filename or "uploaded"
-    file_bytes = f.read()
+        f = request.files["file"]
+        filename = f.filename or "uploaded"
+        file_bytes = f.read()
 
-    # 1) store raw in blob
-    blob_name = blob.upload_file(file_bytes, filename)
+        print("UPLOAD: received", filename, "bytes:", len(file_bytes))
 
-    # 2) extract + chunk
-    text = extract_text(file_bytes, filename)
-    if not text.strip():
-        return jsonify({"error": "Could not extract text"}), 400
+        blob_name = blob.upload_file(file_bytes, filename)
+        print("UPLOAD: blob stored as", blob_name)
 
-    chunks = chunk_text(text)
+        text = extract_text(file_bytes, filename)
+        print("UPLOAD: extracted text length", len(text))
 
-    # 3) embed chunks (batch)
-    vectors = aoai.embed(chunks)
+        if not text.strip():
+            return jsonify({"error": "Could not extract text"}), 400
 
-    # 4) create doc_id and index records
-    doc_id = str(uuid.uuid4())
-    DOCUMENTS[doc_id] = {"filename": filename, "blob_name": blob_name}
+        chunks = chunk_text(text)
+        print("UPLOAD: chunks", len(chunks))
 
-    records = []
-    for i, (chunk, vec) in enumerate(zip(chunks, vectors)):
-        records.append({
-            "id": f"{doc_id}_{i}",
-            "doc_id": doc_id,
-            "filename": filename,
-            "chunk_index": i,
-            "content": chunk,
-            "contentVector": vec
-        })
+        vectors = aoai.embed(chunks)
+        print("UPLOAD: embedded", len(vectors))
 
-    upsert_chunks(search_client, records)
+        doc_id = str(uuid.uuid4())
+        DOCUMENTS[doc_id] = {"filename": filename, "blob_name": blob_name}
 
-    return jsonify({"doc_id": doc_id, "filename": filename, "chunks_indexed": len(records)})
+        records = []
+        for i, (chunk, vec) in enumerate(zip(chunks, vectors)):
+            records.append({
+                "id": f"{doc_id}_{i}",
+                "doc_id": doc_id,
+                "filename": filename,
+                "chunk_index": i,
+                "content": chunk,
+                "contentVector": vec
+            })
+
+        upsert_chunks(search_client, records)
+        print("UPLOAD: indexed records", len(records))
+
+        return jsonify({"doc_id": doc_id, "filename": filename, "chunks_indexed": len(records)})
+
+    except Exception as e:
+        import traceback
+        print("UPLOAD ERROR:", str(e))
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @app.get("/documents")
 def documents():

@@ -1,11 +1,15 @@
+from azure.search.documents.models import VectorizedQuery
+
 def retrieve_top_chunks(search_client, query_vector, doc_id: str, k: int = 5):
     results = search_client.search(
         search_text="",
-        vector_queries=[{
-            "vector": query_vector,
-            "k_nearest_neighbors": k,
-            "fields": "contentVector"
-        }],
+        vector_queries=[
+            VectorizedQuery(
+                vector=query_vector,
+                k_nearest_neighbors=k,
+                fields="contentVector",
+            )
+        ],
         filter=f"doc_id eq '{doc_id}'",
         select=["content", "chunk_index", "filename", "doc_id"]
     )
