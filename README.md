@@ -11,6 +11,7 @@ Minimal setup guide for the demo app.
    - `python -m venv .venv`
    - `.venv\Scripts\Activate.ps1`
    - `pip install -r backend/requirements.txt`
+   -   - Optional: set `AZURE_APPINSIGHTS_CONNECTION_STRING` to enable logging.
 2. Configure environment:
    - Copy `backend/.env.example` to `backend/.env`
    - Fill in Azure OpenAI, Search, Blob, and Document Intelligence values.
