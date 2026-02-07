@@ -10,7 +10,7 @@ load_dotenv()
 from config import Config
 
 try:
-    from opencensus.ext.azure.log_exporter import AzureLogHandler
+    from opencensus.ext.azure.log_exporter import AzureLogHandler  # type: ignore
 except Exception:  # optional dependency
     AzureLogHandler = None
 from services.blob_service import BlobStorage
