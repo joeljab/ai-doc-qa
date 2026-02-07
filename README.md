@@ -14,6 +14,7 @@ Minimal setup guide for the demo app.
 2. Configure environment:
    - Copy `backend/.env.example` to `backend/.env`
    - Fill in Azure OpenAI, Search, Blob, and Document Intelligence values.
+   - Optional: set `AZURE_APPINSIGHTS_CONNECTION_STRING` to enable logging.
 3. Run the API:
    - `python backend/app.py`
 

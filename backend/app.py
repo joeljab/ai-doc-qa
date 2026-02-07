@@ -1,12 +1,18 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import uuid
+import logging
 
 from dotenv import load_dotenv
 load_dotenv()
 
 
 from config import Config
+
+try:
+    from opencensus.ext.azure.log_exporter import AzureLogHandler
+except Exception:  # optional dependency
+    AzureLogHandler = None
 from services.blob_service import BlobStorage
 from services.extract_text import extract_text
 from services.chunking import chunk_text
@@ -18,6 +24,19 @@ app = Flask(__name__)
 CORS(app)
 
 cfg = Config()
+
+if cfg.AZURE_APPINSIGHTS_CONNECTION_STRING:
+    if AzureLogHandler is None:
+        print("App Insights connection string set, but opencensus-ext-azure is not installed.")
+    else:
+        level_name = (cfg.AZURE_APPINSIGHTS_LOG_LEVEL or "INFO").upper()
+        level = getattr(logging, level_name, logging.INFO)
+        handler = AzureLogHandler(connection_string=cfg.AZURE_APPINSIGHTS_CONNECTION_STRING)
+        handler.setLevel(level)
+        logging.getLogger().addHandler(handler)
+        logging.getLogger().setLevel(level)
+        app.logger.addHandler(handler)
+        app.logger.setLevel(level)
 
 # Init services
 blob = BlobStorage(cfg.AZURE_BLOB_CONNECTION_STRING or "", cfg.AZURE_BLOB_CONTAINER or "")
