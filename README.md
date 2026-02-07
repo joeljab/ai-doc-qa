@@ -1,5 +1,8 @@
 # AI Document Q&A
 
+<img width="3840" height="2160" alt="image" src="https://github.com/user-attachments/assets/3e2843dd-264e-43af-b922-ad27d188448c" />
+
+
 Minimal setup guide for the demo app.
 
 ## Prerequisites
